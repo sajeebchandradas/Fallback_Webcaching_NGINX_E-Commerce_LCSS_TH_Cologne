@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ecommerce
+  template:
+    metadata:
+      labels:
+        app: ecommerce
+    spec:
+      containers:
+      - name: flask-app
+        image: flask-ecommerce:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5000
+      - name: nginx-sidecar
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: nginx-conf
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: cache
+          mountPath: /var/cache/nginx
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: nginx-config
+      - name: cache
+        hostPath:
+          path: /mnt/nginx-cache
+          type: DirectoryOrCreate
