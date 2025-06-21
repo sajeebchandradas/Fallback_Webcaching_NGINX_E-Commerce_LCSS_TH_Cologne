@@ -1,24 +1,25 @@
-# Fallback Web Caching with NGINX Sidecar in Kubernetes
+# 🧊 Fallback by Means of Web Caching using NGINX Sidecar
 
-This project is part of the **LCSS Lab** at **TH Cologne**. It demonstrates how to implement **web caching fallback** using **NGINX** as a sidecar proxy in a Kubernetes deployment, serving a Flask-based e-commerce application hosted on an **AWS EC2 Ubuntu instance** with **Minikube**.
+## 📘 Overview
 
+This lab project demonstrates how web caching can be used as a **resilience mechanism** in cloud-native applications. A Flask-based E-Commerce web application is deployed inside a **Kubernetes cluster (Minikube)**, where **NGINX acts as a sidecar proxy** to provide cached responses when the backend is temporarily unavailable. This ensures users get responses even during outages.
 
+## 🎯 Objectives
 
-## 🚀 Project Overview
+- Improve application availability and user experience during backend failures.
+- Use **NGINX** as a caching sidecar within a Kubernetes Pod.
+- Serve **cached static responses** on cache HIT or EXPIRED states.
+- Demonstrate fallback patterns in real-world deployment scenarios using **Ngrok for external access**.
 
-When the Flask app backend becomes unavailable, NGINX serves cached content to ensure **high availability** and **improved perceived uptime**. The caching behavior follows HTTP response codes and TTL settings, making use of `HIT`, `MISS`, and `EXPIRED` status headers.
+## 🧰 Technologies Used
 
-### ✅ Key Features
-- Flask E-Commerce Web App with SQLite DB
-- Dockerized Backend
-- Kubernetes Deployment with Sidecar Pattern
-- NGINX Reverse Proxy with Web Caching
-- NodePort Service Exposure
-- Public Access using Ngrok Tunnel
-- Cache Simulation: HIT, MISS, EXPIRED
-- Fallback Testing when Flask App Fails
-
-
+- 🐍 Flask (Python) – Backend application
+- 🐋 Docker – Containerization
+- ☸️ Kubernetes (Minikube) – Container orchestration
+- 🌐 NGINX – Sidecar reverse proxy and web caching layer
+- 🧪 SQLite – Lightweight embedded database for orders
+- 🌍 Ngrok – Public tunnel to NodePort service
+- 🐧 Ubuntu 22.04 LTS on EC2 – Cloud hosting platform
 
 ## 📁 Project Structure
 
@@ -37,179 +38,119 @@ When the Flask app backend becomes unavailable, NGINX serves cached content to e
 └── static/images/        # Product images (e.g., laptop.jpg, tablet.jpg)
 
 
+---
 
+## ⚙️ Project Components
 
+### 🛍️ Backend App (Flask)
 
-## 🛠️ Setup Instructions
+- Displays a product catalog
+- Takes orders and saves them in a local SQLite DB
+- Uses Jinja templates and static resources
 
-### 🔹 1. Launch EC2 and SSH
+### 🌐 NGINX Sidecar
+
+- Proxies requests to Flask via `proxy_pass`
+- Caches successful `200 OK` responses for 10 seconds
+- Uses `X-Proxy-Cache` header to expose HIT/MISS/EXPIRED status
+- Serves stale cache if Flask backend goes down
+
+### 🗂️ Kubernetes Setup
+
+- **Deployment** with two containers (Flask + NGINX)
+- **ConfigMap** for custom NGINX configuration
+- **Volumes** for persistent caching directory and config mount
+- **NodePort Service** for external access via Minikube IP
+- **Ngrok Tunnel** to expose NodePort to public internet
+
+---
+
+## 🛠️ Setup Plan
+
+1. **Launch EC2** and install Docker, Minikube, kubectl
+2. **Build Docker image** for Flask app:
+   ```bash
+   docker build -t flask-ecommerce:latest .
+
+3. **Create ConfigMap** for `nginx.conf`
+
+   ```bash
+   kubectl create configmap nginx-config --from-file=nginx.conf
+   ```
+4. **Deploy Kubernetes manifests**
+
+   ```bash
+   kubectl apply -f deployment.yaml
+   kubectl apply -f service.yaml
+   ```
+5. **Expose service using Ngrok**
+
+   ```bash
+   ngrok http <minikube-ip>:31304
+   ```
+
+---
+
+## 🧪 Testing Strategy
+
+| Scenario                     | Description                    | Expected Header    |
+| ---------------------------- | ------------------------------ | ------------------ |
+| First visit                  | Cache is empty                 | `MISS`             |
+| Refresh within 10s           | Response from cache            | `HIT`              |
+| After 10s                    | Cache revalidated              | `EXPIRED`          |
+| Backend killed               | Serve stale cache if available | `HIT` or `EXPIRED` |
+| Cache cleared + backend down | Fallback fails                 | `502 Bad Gateway`  |
 
 ```bash
-ssh -i your-key.pem ubuntu@<your-ec2-public-ip>
-````
-
-### 🔹 2. Install Docker
-
-```bash
-curl -fsSL https://get.docker.com | sudo bash
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-### 🔹 3. Install Minikube & kubectl
-
-```bash
-curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube_latest_amd64.deb
-sudo dpkg -i minikube_latest_amd64.deb
-
-curl -LO "https://dl.k8s.io/release/$(curl -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-```
-
-### 🔹 4. Start Minikube
-
-```bash
-minikube start --driver=docker
-minikube ssh
-sudo mkdir -p /mnt/nginx-cache && sudo chmod 777 /mnt/nginx-cache
-exit
+curl -I https://<ngrok-url>
 ```
 
 ---
 
-## 🐳 Build Docker Image
+## 🔥 Failure Simulation
 
-```bash
-eval $(minikube docker-env)
-docker build -t flask-ecommerce:latest .
-```
+* Kill the `flask-app` container from deployment
+* Reload the website or run `curl` commands
+* Observe fallback behavior with cached content
 
----
-
-## ⚙️ Create ConfigMap for NGINX
-
-```bash
-kubectl create configmap nginx-config --from-file=nginx.conf
-```
-
----
-
-## 🚀 Deploy to Kubernetes
-
-```bash
-kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml
-```
-
----
-
-## 🌐 Expose Using Ngrok
-
-```bash
-ngrok config add-authtoken <your-ngrok-token>
-minikube ip   # Example: 192.168.49.2
-ngrok http 192.168.49.2:31304
-```
-
-Copy the public HTTPS URL and open in browser.
-
----
-
-## ✅ Test Caching Behavior
-
-```bash
-curl -I https://<your-ngrok-url>/ | grep X-Proxy-Cache
-```
-
-* First request → `MISS`
-* Next request → `HIT`
-* After TTL expires (10s) → `EXPIRED`
-
----
-
-## 🔧 Simulate Backend Failure (Fallback Test)
-
-1. Edit the Deployment to remove Flask container:
-
-```bash
-kubectl edit deployment ecommerce-deployment
-# Delete the flask-app container section
-```
-
-2. Test again:
-
-```bash
-curl -I https://<your-ngrok-url>/
-```
-
-* You should see stale cache (`HIT` or `EXPIRED`)
-* If cache is cleared: `502 Bad Gateway`
-
----
-
-## ♻️ Clear Cache
+To clear cache:
 
 ```bash
 minikube ssh
 sudo rm -rf /mnt/nginx-cache/*
-exit
 ```
 
 ---
 
-## 🔄 Restore Flask Backend
+## 📊 Learning Outcomes
 
-Re-add the `flask-app` container section to the deployment or:
-
-```bash
-kubectl apply -f deployment.yaml
-```
-
-Test again:
-
-```bash
-curl -I https://<your-ngrok-url>/
-```
+* Implemented sidecar caching pattern in Kubernetes
+* Demonstrated cache fallback using real-time test cases
+* Explored TTL tuning and stale content behavior
+* Improved service resilience without load balancers or external CDNs
 
 ---
 
-## 📸 Screenshots & Logs
+## ❓ Research Questions
 
-Include:
-
-* Web UI
-* Ngrok Terminal Output
-* `curl` results showing HIT, MISS, EXPIRED
-* 502 Fallback page
-* Restored output
+* How can stale responses reduce perceived downtime?
+* When is fallback via cache appropriate (and when not)?
+* How does NGINX handle expired cache during backend unavailability?
+* What are the best TTL values for dynamic vs. static apps?
 
 ---
 
-## 📚 Learning Outcomes
+## 📈 Future Enhancements
 
-* Sidecar pattern implementation
-* Reverse proxy and web caching with NGINX
-* Minikube-based local Kubernetes deployment
-* Ngrok tunneling for public exposure
-* Cache simulation and backend failure fallback
-
----
-
-## 📧 Contact
-
-For any doubts, feel free to contact me through GitHub issues or \[[email@example.com](mailto:email@example.com)].
+* Dynamic cache invalidation
+* Multi-service fallback
+* CDN integration with cache headers
+* ETag or Last-Modified cache strategies
 
 ---
 
-## 🏁 Final Notes
+## 👨‍💻 Author
 
-You have now successfully deployed a **robust web caching system** on Kubernetes using the **sidecar pattern** with fallback capabilities in case of backend service failure.
+**Sajeeb Chandra Das - Team 05 – Large and Cloud-based Software Systems Lab, TH Cologne**
 
-Happy learning! 🚀
 
-```
-
----
-
-Let me know if you want this file in `.md` format, zipped with the rest of the project files, or directly pushed to a GitHub repo.
-```
