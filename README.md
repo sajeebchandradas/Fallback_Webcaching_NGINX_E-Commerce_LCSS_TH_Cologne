@@ -1,4 +1,4 @@
-# 🧊 Fallback by Means of Web Caching using NGINX Sidecar
+# 🧊 Fallback by Means of Web Caching using NGINX Sidecar.
 
 ## 📘 Overview
 
